@@ -6,6 +6,8 @@
 # url,username,password,1extra,name,grouping(\ delimited),last_touch,launch_count,fav
 
 import sys, csv, time, datetime, itertools, re # Toolkit
+import traceback
+from datetime import datetime
 import xml.etree.ElementTree as ET # Saves data, easier to type
 
 # Strings
@@ -28,18 +30,21 @@ except:
     sys.exit()
     
 try:
-	f = open(inputFile)
+    f = open(inputFile)
 except IOError:
-	formattedPrint("Cannot read file: '%s' Error: '%s'" % (inputFile, fileError) )
-	sys.exit()
-	
+    traceback.print_exc()
+    formattedPrint("Cannot read file: '%s' Error: '%s'" % (inputFile, fileError) )
+    sys.exit()
+
 # Create XML file.
 outputFile = inputFile + ".export.xml"
 
 try:
+    print outputFile
     open(outputFile, "w").close() # Clean.
-    w = open(outputFile, "aw")
+    w = open(outputFile, "w")
 except IOError:
+    traceback.print_exc()
     formattedPrint("Cannot write to disk... exiting. Error: '%s'" % (fileError) )
     sys.exit()
 
@@ -62,16 +67,18 @@ f.close() # Close the read file.
 # Keepass XML generator
    
 # Add doctype to head, clear file.
-w.write("<!DOCTYPE KEEPASSX_DATABASE>")
+w.write('<?xml version="1.0" encoding="utf-8" standalone="yes"?>')
 
 # Generate Creation date
 # Form current time expression.
-now = datetime.datetime.now()
-formattedNow = now.strftime("%Y-%m-%dT%H:%M")
+isoDtFormat = "%Y-%m-%dT%H:%M:%S"
+lpDtFormat = "%Y-%m-%d %H:%M:%S"
+now = datetime.now()
+formattedNow = now.strftime(isoDtFormat)
 
 # Initialize tree
 # build a tree structure
-page = ET.Element('database')
+page = ET.Element('pwlist')
 doc = ET.ElementTree(page)
 
 # Dictionary of failed entries
@@ -80,53 +87,33 @@ failed = {}
 formattedPrint("DEBUG of '%s' file conversion to the KeePassXML format, outputing to the '%s' file." %(inputFile,outputFile))
     
 # A dictionary, organising the categories.
-resultant = {}
-    
-# Parses allEntries into a resultant.
 for entry in allEntries:
     try:
-        categories = re.split(r"[/\\]",entry[5]) # Grab final category.
-        
-        for x in categories:
-            resultant.setdefault(categories.pop(), []).append(entry) # Sort by categories.
+        # Each entryElement
+        entryElement = ET.SubElement(page, "pwentry")
+        # entryElement tree
+        grouping = re.split(r"[/\\]",entry[5])
+        ET.SubElement(entryElement, 'group', tree="LastPass").text = grouping and grouping[0] or "(none)"
+        ET.SubElement(entryElement, 'title').text = str(entry[4])
+        ET.SubElement(entryElement, 'username').text = str(entry[1])
+        ET.SubElement(entryElement, 'password').text = str(entry[2])
+        ET.SubElement(entryElement, 'url').text = str(entry[0])
+        ET.SubElement(entryElement, 'notes').text = str(entry[3])
+        ET.SubElement(entryElement, 'icon').text = "0"
+        ET.SubElement(entryElement, 'creationtime').text = formattedNow
+        try:
+            lastAccTime = datetime.strptime(entry[6], lpDtFormat).strftime(isoDtFormat)
+        except ValueError:
+            lastAccTime = formattedNow
+        ET.SubElement(entryElement, 'lastaccesstime').text = lastAccTime
+        ET.SubElement(entryElement, 'expiretime', expires="false").text = "2999-12-28T23:59:59"
     except:
-        # Catch illformed entries         
-        # Grab entryElement position
+        traceback.print_exc()
+        # Catch illformed entries          
+        # Grab entry position
         p = allEntries.index(entry) + 2
         failed[p] = [",".join(entry)]
-        
-        print "Failed to format entryElement at line %s" % (p)
-
-# Initilize and loop through all entries
-for category, categoryEntries in resultant.iteritems():
-
-	# Create head of group elements
-    headElement = ET.SubElement(page, "group")
-    ET.SubElement(headElement, "title").text = str(category)
-    ET.SubElement(headElement, "icon").text = "0" # Lastpass does not retain icons.
-    
-    for entry in categoryEntries: 
-    # entryElement information
-        try:
-            # Each entryElement
-            entryElement = ET.SubElement(headElement, "entry")
-            # entryElement tree
-            ET.SubElement(entryElement, 'title').text = str(entry[4])
-            ET.SubElement(entryElement, 'username').text = str(entry[1])
-            ET.SubElement(entryElement, 'password').text = str(entry[2])
-            ET.SubElement(entryElement, 'url').text = str(entry[0])
-            ET.SubElement(entryElement, 'comment').text = str(entry[3])
-            ET.SubElement(entryElement, 'icon').text = "0"
-            ET.SubElement(entryElement, 'creation').text = formattedNow
-            ET.SubElement(entryElement, 'lastaccess').text = str(entry[6])
-            ET.SubElement(entryElement, 'lastmod').text = str(entry[7])
-            ET.SubElement(entryElement, 'expire').text = "Never"
-        except:
-            # Catch illformed entries          
-            # Grab entry position
-            p = allEntries.index(entry) + 2
-            failed[p] = [",".join(entry)]
-            print "Failed to format entry at line %d" %(p)
+        print "Failed to format entry at line %d" %(p)
 
 # Check if it was a clean conversion.
 if len(failed) != 0:
@@ -140,7 +127,7 @@ if len(failed) != 0:
 
 # Write out tree
 # wrap it in an ElementTree instance, and save as XML
-doc.write(w)
+doc.write(w, encoding="utf-8")
 w.close()
 
 print lineBreak
