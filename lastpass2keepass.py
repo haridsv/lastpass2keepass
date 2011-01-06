@@ -40,7 +40,6 @@ except IOError:
 outputFile = inputFile + ".export.xml"
 
 try:
-    print outputFile
     open(outputFile, "w").close() # Clean.
     w = open(outputFile, "w")
 except IOError:
@@ -107,13 +106,12 @@ for entry in allEntries:
             lastAccTime = formattedNow
         ET.SubElement(entryElement, 'lastaccesstime').text = lastAccTime
         ET.SubElement(entryElement, 'expiretime', expires="false").text = "2999-12-28T23:59:59"
-    except:
-        traceback.print_exc()
+    except Exception, e:
         # Catch illformed entries          
         # Grab entry position
         p = allEntries.index(entry) + 2
         failed[p] = [",".join(entry)]
-        print "Failed to format entry at line %d" %(p)
+        print "Failed to format entry at line %d, due to error: %s" % (p, ' '.join(e.args))
 
 # Check if it was a clean conversion.
 if len(failed) != 0:
